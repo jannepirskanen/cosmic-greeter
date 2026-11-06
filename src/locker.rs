@@ -81,7 +81,7 @@ async fn wait_for_fingerprint_device() {
             return;
         }
 
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }
 
@@ -1264,10 +1264,10 @@ impl cosmic::Application for App {
                 if matches!(self.state, State::Locked { .. }) {
                     self.stop_auth_task();
 
-                    return cosmic::task::future(async {
-                        wait_for_fingerprint_device().await;
-                        Message::RestartAuth
-                    });
+                   // return cosmic::task::future(async {
+                   //     wait_for_fingerprint_device().await;
+                   //     Message::RestartAuth
+                   // });
                 }
             },
             Message::RestartAuth => {
