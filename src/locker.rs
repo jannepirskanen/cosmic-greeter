@@ -45,6 +45,8 @@ use crate::fl;
 const PAM_MIN_ATTEMPT_DURATION: Duration = Duration::from_millis(500);
 
 async fn wait_for_fingerprint_device() {
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
     let Ok(connection) = zbus::Connection::system().await else {
         tracing::warn!("failed to connect to system D-Bus");
         return;
