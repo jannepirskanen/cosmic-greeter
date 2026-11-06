@@ -44,12 +44,10 @@ use crate::fl;
 /// this duration before retrying.
 const PAM_MIN_ATTEMPT_DURATION: Duration = Duration::from_millis(500);
 
-async fn wait_for_fingerprint_device() {
-    //tokio::time::sleep(Duration::from_millis(10)).await;
-
+async fn wait_for_fingerprint_device() -> bool {
     let Ok(connection) = zbus::Connection::system().await else {
         tracing::warn!("failed to connect to system D-Bus");
-        return;
+        return false;
     };
 
     let Ok(proxy) = zbus::Proxy::new(
@@ -61,7 +59,7 @@ async fn wait_for_fingerprint_device() {
     .await
     else {
         tracing::warn!("failed to create fprintd manager proxy");
-        return;
+        return false;
     };
 
     let deadline =
@@ -71,14 +69,28 @@ async fn wait_for_fingerprint_device() {
         let devices: zbus::Result<Vec<zbus::zvariant::OwnedObjectPath>> =
             proxy.call("GetDevices", &()).await;
 
-        if matches!(devices, Ok(ref devices) if !devices.is_empty()) {
-            tracing::info!("fingerprint device available after resume");
-            return;
+        match devices {
+            Ok(devices) if !devices.is_empty() => {
+                tracing::info!("fingerprint device available after resume");
+                return true;
+            }
+            Ok(_) => {
+                tracing::debug!(
+                    "fingerprint device not available yet after resume"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "failed to query fingerprint devices after resume: {err}"
+                );
+            }
         }
 
         if tokio::time::Instant::now() >= deadline {
-            tracing::warn!("timed out waiting for fingerprint device after resume");
-            return;
+            tracing::warn!(
+                "timed out waiting for fingerprint device after resume"
+            );
+            return false;
         }
 
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -1264,10 +1276,15 @@ impl cosmic::Application for App {
                 if matches!(self.state, State::Locked { .. }) {
                     self.stop_auth_task();
 
-                   // return cosmic::task::future(async {
-                   //     wait_for_fingerprint_device().await;
-                   //     Message::RestartAuth
-                   // });
+                    return cosmic::task::future(async {
+                        if wait_for_fingerprint_device().await {
+                            tracing::warn!("FPDEBUG: device ready -> restarting authentication");
+                            Message::RestartAuth
+                        } else {
+                            tracing::warn!("FPDEBUG: device NOT ready -> authentication not restarted");
+                            Message::None
+                        }
+                    });
                 }
             },
             Message::RestartAuth => {
